@@ -1,10 +1,13 @@
 #pragma once
 #include <winsock2.h>
+#include <ws2tcpip.h>
 #include "Exception.h"
 
 namespace tmc
 {
-    static class Socket
+    class ClientSocket;
+
+    class Socket
     {
     private:
         SOCKET listener;
@@ -12,10 +15,33 @@ namespace tmc
     public:
         Socket();
         Socket(const char *port);
+        ~Socket(){ clean(); }
         void init(const char *port);
         void listen(int maxQueue = SOMAXCONN);
-        SOCKET *accept();
+        ClientSocket accept();
         void clean();
+    };
+
+    class ClientSocket
+    {
+        SOCKET socket;
+    public:
+        ClientSocket(SOCKET s):socket(s){}
+        ~ClientSocket()
+        {
+			shutdown(socket, SD_SEND);
+			closesocket(socket);
+        }
+
+        int gets(char *buffer, int len)
+        {
+            return recv(socket, buffer, len, 0);
+        }
+
+        int get(char &c)
+        {
+            return recv(socket, &c, 1, 0);
+        }
     };
 }
 
@@ -25,16 +51,15 @@ void tmc::Socket::clean()
     WSACleanup();
 }
 
-SOCKET *tmc::Socket::accept()
+tmc::ClientSocket tmc::Socket::accept()
 {
-    static SOCKET client;
-    client = INVALID_SOCKET;
-    client = accept(listener, NULL, NULL);
+    SOCKET client = INVALID_SOCKET;
+    client = ::accept(listener, NULL, NULL);
     if (INVALID_SOCKET == client)
     {
-        clean();
         throw Exception("Error in accept()!", WSAGetLastError());
     }
+    return ClientSocket(client);
 }
 
 tmc::Socket::Socket():listener(INVALID_SOCKET){}
@@ -51,50 +76,46 @@ void tmc::Socket::init(const char *port)
     if (0 != result)
     {
         // initialization failed
-        clean();
         throw Exception("Initialize WinSock v2.2 Failed", result);
     }
+
 
     addrinfo *addrResult = nullptr, hints;
     ZeroMemory(&hints, sizeof(hints));
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocal = IPPROTO_TCP;
+    hints.ai_protocol = IPPROTO_TCP;
     hints.ai_flags = AI_PASSIVE;
 
     // Getting address info
     result = getaddrinfo(nullptr, port, &hints, &addrResult);
     if (0 != result)
     {
-        clean();
         throw Exception("Get Addrinfo Failed!", result);
     }
 
     // Creating a listen socket
-    SOCKET *listener = INVALID_SOCKET;
-    *listener = socket(addrResult->ai_family, addrResult->ai_socktype, addrResult->ai_protocal);
-    if (INVALID_SOCKET == *socketConnection)
+    listener = socket(addrResult->ai_family, addrResult->ai_socktype, addrResult->ai_protocol);
+    if (INVALID_SOCKET == listener)
     {
-        freeaddrinfo(addrResult);
-        clean();
         throw Exception("Error while creating a socket!", WSAGetLastError());
     }
 
     // Binding a socket to port
-    result = bind(listener, addrResult->ai_addr, (int)result->ai_addrlen);
+    result = bind(listener, addrResult->ai_addr, (int)addrResult->ai_addrlen);
     freeaddrinfo(addrResult);
     if (SOCKET_ERROR == result)
     {
-        clean();
         throw Exception("Error in bind()!", WSAGetLastError());
     }
 }
 
-void tmc::Socket::listen(SOCKET *s, int maxQueue)
+void tmc::Socket::listen(int maxQueue)
 {
-    if (SOCKET_ERROR == listen(s, maxQueue))
+	int result = ::listen(listener, maxQueue);
+    if (SOCKET_ERROR == ::listen(listener, maxQueue))
     {
-        clean();
         throw Exception("Error in listen()!", WSAGetLastError());
     }
 }
+
