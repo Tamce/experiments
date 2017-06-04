@@ -1,8 +1,9 @@
 #pragma once
 #include <cstring>
+#include <exception>
 namespace tmc
 {
-    class Exception
+    class Exception : public std::exception
     {
     public:
         char *const message;
@@ -15,5 +16,9 @@ namespace tmc
         {
             delete message;
         }
+		const char *what()
+		{
+			return message;
+		}
     };
 }

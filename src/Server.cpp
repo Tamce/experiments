@@ -5,6 +5,8 @@
 #include "Socket.h"
 
 using std::cout;
+using std::endl;
+using std::cin;
 using std::thread;
 using std::stringstream;
 using std::string;
@@ -15,9 +17,9 @@ using tmc::Socket;
 
 void showHelp();
 void serviceProvider();
-void resolveRequest(string str)
+void resolveRequest(stringstream &str)
 {
-    cout << "\nClient says:\n" << str;
+    cout << "\nClient says:\n" << str.str() << endl;
 }
 
 inline void parseCommand(int &argc, char **argv)
@@ -36,31 +38,36 @@ int main(int argc, char **argv)
 	parseCommand(argc, argv);
 	serviceThread = thread(serviceProvider);
 	// serviceProvider();
-	while (true);
+	cin.get();
+	serviceThread.detach();
+	return 0;
 }
 
 void serviceProvider()
 {
 	try
 	{
-		Socket s;
+		Socket serverSocket;
 		char buff;
 		stringstream ss;
-		cout << "\nSetting up socket and bind port 21...";
-		s.init("21");
-		cout << "\nTry to listen on port 21...";
-		s.listen();
+		cout << "\nCreating a service socket listening on port 21...";
+		serverSocket.openListen("21");
 		cout << "\nListening port 21...";
 		while (true)
 		{
-			ClientSocket client = s.accept();
+			ClientSocket client = serverSocket.accept();
 			cout << "\nClient connected! Fetching data...";
 			ss.str("");
 			while (client.get(buff))
 			{
+				if (buff == '\n')
+					break;
 				ss << buff;
 			}
-			resolveRequest(ss.str());
+			client.send("You said: ");
+			client.send(ss.str().c_str());
+			client.shutdownClose();
+			resolveRequest(ss);
 		}
 	} catch (tmc::Exception e)
 	{
@@ -72,12 +79,12 @@ void showHelp()
 {
     cout <<
 "\n\
-Tamce Simple File Transmit Protocal(TSFTP)\n\
+Tamce File Transmit Protocal(TSFTP)\n\
          Server Side Program\n\
 \n\
 Usage:\n\
 \n\
-tsftpd\
+tftpd\
 ";
 
 }
