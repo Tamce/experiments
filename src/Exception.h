@@ -1,24 +1,20 @@
 #pragma once
-#include <cstring>
+#include <sstream>
 #include <exception>
 namespace tmc
 {
     class Exception : public std::exception
     {
     public:
-        char *const message;
-        int code;
-        Exception(const char *m, int _code = 0): code(_code), message(new char[strlen(m) + 1])
+		std::stringstream buff;
+        Exception(const char *m, int code = 0)
         {
-            std::strcpy(message, m);
+			buff.str(m);
+			buff << "\tError Code: " << code;
         }
-        ~Exception()
-        {
-            delete message;
-        }
-		const char *what()
+		virtual const char *what()
 		{
-			return message;
+			return buff.str().c_str();
 		}
     };
 }

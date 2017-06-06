@@ -2,6 +2,7 @@
 #include <iostream>
 #include <thread>
 #include <sstream>
+#include <exception>
 #include "Socket.h"
 
 using std::cout;
@@ -10,6 +11,7 @@ using std::cin;
 using std::thread;
 using std::stringstream;
 using std::string;
+using std::exception;
 using tmc::ClientSocket;
 using tmc::Socket;
 
@@ -37,7 +39,6 @@ int main(int argc, char **argv)
 
 	parseCommand(argc, argv);
 	serviceThread = thread(serviceProvider);
-	// serviceProvider();
 	cin.get();
 	serviceThread.detach();
 	return 0;
@@ -69,9 +70,9 @@ void serviceProvider()
 			client.shutdownClose();
 			resolveRequest(ss);
 		}
-	} catch (tmc::Exception e)
+	} catch (exception e)
 	{
-		std::cerr << e.message << e.code << std::flush;
+		std::cerr << "An error occurred!\n" << e.what();
 	}
 }
 
