@@ -3,7 +3,7 @@
 #include <thread>
 #include <sstream>
 #include <exception>
-#include "Socket.h"
+#include "../Socket.h"
 
 using std::cout;
 using std::endl;
@@ -21,7 +21,7 @@ void showHelp();
 void serviceProvider();
 void resolveRequest(stringstream &str)
 {
-    cout << "\nClient says:\n" << str.str() << endl;
+    cout << "\nClient says" << str.str().length() << " words :\n" << str.str() << endl;
 }
 
 inline void parseCommand(int &argc, char **argv)
@@ -61,13 +61,14 @@ void serviceProvider()
 			ss.str("");
 			while (client.get(buff))
 			{
-				if (buff == '\n')
-					break;
+				// if (buff == '\n')
+					// break;
 				ss << buff;
 			}
 			client.send("You said: ");
 			client.send(ss.str().c_str());
 			client.shutdownClose();
+			cout << "\nClient disconnected.";
 			resolveRequest(ss);
 		}
 	} catch (exception e)

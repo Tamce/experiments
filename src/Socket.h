@@ -29,18 +29,20 @@ namespace tmc
         ClientSocket accept();
 		int close();
 
-		ClientSocket connect(const char *address, const char *port);
+		ClientSocket connect(const char *address, const char *port, bool raw = false);
 	private:
 		SOCKET listener;
 		WSADATA wsaData;
 		addrinfo *getAddr(const char *address, const char *port, type t);
     };
 
-    class ClientSocket
-    {
-        SOCKET socket;
-    public:
+	class ClientSocket
+	{
+		SOCKET socket;
+	public:
+		ClientSocket():ClientSocket(INVALID_SOCKET){}
         ClientSocket(SOCKET s):socket(s){}
+
         ~ClientSocket()
         {
 			shutdown();
@@ -172,7 +174,7 @@ void tmc::Socket::listen(int maxQueue)
     }
 }
 
-tmc::ClientSocket tmc::Socket::connect(const char *addr, const char *p)
+tmc::ClientSocket tmc::Socket::connect(const char *addr, const char *p, bool raw)
 {
 	addrinfo *addrResult = getAddr(addr, p, POSITIVE);
 	SOCKET client = INVALID_SOCKET;
@@ -190,5 +192,8 @@ tmc::ClientSocket tmc::Socket::connect(const char *addr, const char *p)
 	{
 		throw Exception("Error in connect()!", WSAGetLastError());
 	}
+
+	if (raw)
+		return client;
 	return ClientSocket(client);
 }
