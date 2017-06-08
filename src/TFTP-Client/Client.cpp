@@ -1,6 +1,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include <iostream>
 #include <sstream>
+#include <utility>
 #include <thread>
 #include <mutex>
 #include <queue>
@@ -38,17 +39,20 @@ void agent();
 
 queue<Task> tasks;
 mutex lock;
+mutex outputLock;
 
 int main()
 {
+	
 	thread messager(resolveTasks);
 	thread master(agent);
 	master.join();
 	messager.detach();
+	
 	/*
 	Socket socket;
 	ClientSocket c;
-	c = socket.connect("127.0.0.1", "21");
+	c = std::move<ClientSocket>(socket.connect("127.0.0.1", "21"));
 	c.send("Hello");
 	c.shutdownClose();
 	*/
@@ -64,12 +68,13 @@ void resolveTasks()
 	char buff[100];
 	while (true)
 	{
-		// todo 如果有数据传输则读取
-		// 如果队列非空，获得锁后处理队列中第一个任务
+		// todo Check if there is data coming, if so, print it to the screen
+		// if tasks is empty, then wait until it is not empty
 		if (tasks.empty())
 		{
 			continue;
 		}
+		outputLock.lock();
 		cerr << "\nPopping a task...";
 		lock.lock();
 		Task task = tasks.front();
@@ -80,29 +85,42 @@ void resolveTasks()
 		{
 			case Task::CONNECT:
 				if (connected)
-					continue;
+				{
+					cerr << "\nThere is an active connection, please shutdown first!";
+					break;
+				}
 				sstr.str(task.args);
 				sstr >> buff >> &buff[50];
-				cerr << "\nConnecting to " << buff << ":" << &buff[50] << "\n";
-				clientSocket = ClientSocket(socket.connect(buff, &buff[50], true));
+				sstr.clear();
+				cerr << "\nConnecting to " << buff << ":" << &buff[50];
+				clientSocket = socket.connect(buff, &buff[50]);
 				connected = true;
 				break;
 			case Task::SENDSTREAM:
 				if (!connected)
-					continue;
-				cerr << "\nSending" << task.args << "\n";
+				{
+					cerr << "\nThere is no active connection, please connect first!";
+					break;
+				}
+				cerr << "\nSending " << task.args.length() << " bytes data.";
 				clientSocket.send(task.args.c_str());
-				cerr << "\nAll data sent.\n";
+				cerr << "\nAll data sent.";
 				break;
 			case Task::SHUTDOWN:
 				if (!connected)
-					continue;
-				cerr << "\nShutting down connected socket.\n";
+				{
+					cerr << "\nThere is no active connection, please connect first!";
+					break;
+				}
+				cerr << "\nShutting down connected socket.";
 				clientSocket.shutdownClose();
+				connected = false;
 				break;
 			default:
+				cerr << "\nUnknown task type: " << task.type;
 				break;
 		}
+		outputLock.unlock();
 	}
 }
 
@@ -112,22 +130,30 @@ void agent()
 	stringstream sstr;
 	while (true)
 	{
-		cout << "> ";
-		sstr.str("");
+		outputLock.lock();
+		cout << "\n\n> ";
+		outputLock.unlock();
+		cin.clear();
+		cin.sync();
 		cin >> command;
 		if (command == "connect")
 		{
-			lock.lock();
+			arg = "";
+			sstr.str("");
 			cin >> arg;
 			sstr << arg;
 			cin >> arg;
 			sstr << " " << arg;
+			lock.lock();
 			tasks.push(Task(Task::CONNECT, sstr.str()));
 			lock.unlock();
 		} else if (command == "send")
 		{
-			lock.lock();
+			char c;
+			cin >> c;
+			cin.unget();
 			std::getline(cin, arg);
+			lock.lock();
 			tasks.push(Task(Task::SENDSTREAM, arg));
 			lock.unlock();
 		} else if (command == "shutdown")
@@ -137,5 +163,9 @@ void agent()
 			lock.unlock();
 		} else if (command == "quit")
 			break;
+		else
+		{
+			cerr << "Unknown command: " << command << "\n";
+		}
 	}
 }

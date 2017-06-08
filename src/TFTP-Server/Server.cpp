@@ -21,7 +21,7 @@ void showHelp();
 void serviceProvider();
 void resolveRequest(stringstream &str)
 {
-    cout << "\nClient says" << str.str().length() << " words :\n" << str.str() << endl;
+    cout << "\nClient message length: " << str.str().length() <<"\n" << str.str() << endl << "====END OF MESSAGE====\n";
 }
 
 inline void parseCommand(int &argc, char **argv)

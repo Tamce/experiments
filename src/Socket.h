@@ -3,6 +3,7 @@
 #include <ws2tcpip.h>
 #include "Exception.h"
 #include <cstring>
+#include <utility>
 
 namespace tmc
 {
@@ -29,7 +30,7 @@ namespace tmc
         ClientSocket accept();
 		int close();
 
-		ClientSocket connect(const char *address, const char *port, bool raw = false);
+		ClientSocket connect(const char *address, const char *port);
 	private:
 		SOCKET listener;
 		WSADATA wsaData;
@@ -42,6 +43,19 @@ namespace tmc
 	public:
 		ClientSocket():ClientSocket(INVALID_SOCKET){}
         ClientSocket(SOCKET s):socket(s){}
+        ClientSocket (const ClientSocket&) = delete;
+        ClientSocket (ClientSocket &&s):ClientSocket(s.socket)
+        {
+        	s.socket = INVALID_SOCKET;
+        }
+        ClientSocket &operator=(const ClientSocket&) = delete;
+        ClientSocket &operator=(ClientSocket &&s)
+        {
+        	shutdownClose();
+        	socket = s.socket;
+        	s.socket = INVALID_SOCKET;
+        	return *this;
+        }
 
         ~ClientSocket()
         {
@@ -174,7 +188,7 @@ void tmc::Socket::listen(int maxQueue)
     }
 }
 
-tmc::ClientSocket tmc::Socket::connect(const char *addr, const char *p, bool raw)
+tmc::ClientSocket tmc::Socket::connect(const char *addr, const char *p)
 {
 	addrinfo *addrResult = getAddr(addr, p, POSITIVE);
 	SOCKET client = INVALID_SOCKET;
@@ -193,7 +207,5 @@ tmc::ClientSocket tmc::Socket::connect(const char *addr, const char *p, bool raw
 		throw Exception("Error in connect()!", WSAGetLastError());
 	}
 
-	if (raw)
-		return client;
 	return ClientSocket(client);
 }
