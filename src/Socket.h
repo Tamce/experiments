@@ -81,7 +81,12 @@ namespace tmc
 
 		int send(const char *buff)
 		{
-			return ::send(socket, buff, std::strlen(buff), 0);
+			return send(buff, std::strlen(buff));
+		}
+
+		int sendWithZero(const char *buff)
+		{
+			return send(buff, std::strlen(buff) + 1);
 		}
 
 		int send(const char *buff, int len)

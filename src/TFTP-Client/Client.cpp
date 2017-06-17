@@ -1,171 +1,163 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include <iostream>
-#include <sstream>
+#include <string>
+#include <fstream>
 #include <utility>
-#include <thread>
-#include <mutex>
-#include <queue>
 #include "../Socket.h"
 
 using std::cout;
 using std::cin;
 using std::cerr;
-using std::stringstream;
-using std::istream;
 using std::string;
-using std::queue;
-using std::thread;
-using std::mutex;
+using std::ifstream;
+using std::ofstream;
 using tmc::Socket;
 using tmc::ClientSocket;
 
 #pragma comment (lib, "WS2_32.lib")
 
-class Task
+void showHelp();
+string fetchString(ClientSocket &server)
 {
-public:
-	enum Type
+	char c = 'x';
+	string str = "";
+	while (c != '\0')
 	{
-		CONNECT, SENDSTREAM, SHUTDOWN
-	};
-	Type type;
-	string args;
-	Task(Type _type, string &_args = string()):type(_type), args(_args){}
-	Task(const Task &task):type(task.type), args(task.args){}
-};
+		server.get(c);
+		str.push_back(c);
+	}
+	return str;
+}
 
-void resolveTasks();
-void agent();
-
-queue<Task> tasks;
-mutex lock;
-mutex outputLock;
-
-int main()
+int main(int argc, char **argv)
 {
-	
-	thread messager(resolveTasks);
-	thread master(agent);
-	master.join();
-	messager.detach();
-	
-	/*
+	if (argc < 3)
+	{
+		showHelp();
+		return 0;
+	}
+
+	char buff[512] = {};
 	Socket socket;
-	ClientSocket c;
-	c = std::move<ClientSocket>(socket.connect("127.0.0.1", "21"));
-	c.send("Hello");
-	c.shutdownClose();
-	*/
+	cout << "Connecting " << argv[1] << ":" << argv[2];
+	ClientSocket server = socket.connect(argv[1], argv[2]);
+	cout << "\nConnection established!";
+	if (0 == server.gets(buff, 8))
+	{
+		cerr << "\n> Connection closed by server accidently, cannot resolve resonse with length 0!";
+		return 1;
+	}
+	cout << "\n> Server response: " << buff;
+	server.shutdownClose();
+	cout << "\n> Connecting " << argv[1] << ":" << buff;
+	server = std::move<ClientSocket>(socket.connect(argv[1], buff));
+	cout << "\n> Connection established! Waiting for commands.";
+	while (true)
+	{
+		static string str, command;
+		command = str = "";
+		cin.clear();
+		cin.sync();
+		cout << "\n$ ";
+		cin >> command;
+		if (command == "LST")
+		{
+			server.send("LST");
+			cout << "\n" << fetchString(server);
+		} else if (command == "HEY")
+		{
+			server.send("HEY");
+			cout << "\n" << fetchString(server);
+		} else if (command == "BYE")
+		{
+			server.send("BYE");
+			while (server.get(buff[0]))
+			{
+				cout << buff[0];
+			}
+			cout << "\n> Lost connection.";
+			// exit loop
+			break;
+		} else if (command == "EXT")
+		{
+			server.shutdownClose();
+			cout << "\n> Closed connection.";
+			break;
+		} else if (command == "GET")
+		{
+			// input filename
+			cin >> str;
+			ofstream file(str, std::ios::out | std::ios::binary);
+			memset(buff, 0, 32);
+			memcpy(buff, str.c_str(), min(str.length(), 32));
+			// send command
+			server.send("GET ");
+			// send filename
+			server.send(buff, 32);
+			// get size of file
+			server.gets(buff, 4);
+			cout << "\n> File length: " << *(int *)buff;
+			for (int n = *(int *)buff; n > 0;)
+			{
+				int count = server.gets(buff, min(512, n));
+				cout << "\n> " << count << " bytes recieved.";
+				n -= count;
+				file.write(buff, count);
+			}
+			cout << "\n> All bytes recieved.";
+			file.close();
+			cout << "\n> File saved to " << str;
+		} else if (command == "SND")
+		{
+			// input filename
+			cin >> str;
+			ifstream file(str, std::ios::in | std::ios::binary);
+			memset(buff, 0, 32);
+			memcpy(buff, str.c_str(), min(str.length(), 32));
+			// send command
+			server.send("SND ");
+			// send filename
+			server.send(buff, 32);
+
+			// send file size
+			file.seekg(0, std::ios::end);
+			int length = file.tellg();
+			cout << "\n> Sending file with length: " << length;
+			memcpy(buff, &length, sizeof(length));
+			server.send(buff, sizeof(length));
+			file.seekg(0, std::ios::beg);
+
+			while (file)
+			{
+				file.read(buff, 512);
+				cout << "\n> Sent " << server.send(buff, file.gcount()) << " bytes.";
+			}
+			cout << "\n> All bytes sent.";
+			file.clear();
+			file.close();
+			cout << "\n" << fetchString(server);
+		} else
+		{
+			cout << "\n> Invalid command! Please re-input a command.";
+		}
+	}
+	cout << "\n> Press anykey to exit.";
+	system("pause >nul");
 	return 0;
 }
 
-void resolveTasks()
+void showHelp()
 {
-	bool connected = false;
-	Socket socket;
-	ClientSocket clientSocket;
-	stringstream sstr;
-	char buff[100];
-	while (true)
-	{
-		// todo Check if there is data coming, if so, print it to the screen
-		// if tasks is empty, then wait until it is not empty
-		if (tasks.empty())
-		{
-			continue;
-		}
-		outputLock.lock();
-		cerr << "\nPopping a task...";
-		lock.lock();
-		Task task = tasks.front();
-		tasks.pop();
-		lock.unlock();
-
-		switch (task.type)
-		{
-			case Task::CONNECT:
-				if (connected)
-				{
-					cerr << "\nThere is an active connection, please shutdown first!";
-					break;
-				}
-				sstr.str(task.args);
-				sstr >> buff >> &buff[50];
-				sstr.clear();
-				cerr << "\nConnecting to " << buff << ":" << &buff[50];
-				clientSocket = socket.connect(buff, &buff[50]);
-				connected = true;
-				break;
-			case Task::SENDSTREAM:
-				if (!connected)
-				{
-					cerr << "\nThere is no active connection, please connect first!";
-					break;
-				}
-				cerr << "\nSending " << task.args.length() << " bytes data.";
-				clientSocket.send(task.args.c_str());
-				cerr << "\nAll data sent.";
-				break;
-			case Task::SHUTDOWN:
-				if (!connected)
-				{
-					cerr << "\nThere is no active connection, please connect first!";
-					break;
-				}
-				cerr << "\nShutting down connected socket.";
-				clientSocket.shutdownClose();
-				connected = false;
-				break;
-			default:
-				cerr << "\nUnknown task type: " << task.type;
-				break;
-		}
-		outputLock.unlock();
-	}
-}
-
-void agent()
-{
-	string command, arg;
-	stringstream sstr;
-	while (true)
-	{
-		outputLock.lock();
-		cout << "\n\n> ";
-		outputLock.unlock();
-		cin.clear();
-		cin.sync();
-		cin >> command;
-		if (command == "connect")
-		{
-			arg = "";
-			sstr.str("");
-			cin >> arg;
-			sstr << arg;
-			cin >> arg;
-			sstr << " " << arg;
-			lock.lock();
-			tasks.push(Task(Task::CONNECT, sstr.str()));
-			lock.unlock();
-		} else if (command == "send")
-		{
-			char c;
-			cin >> c;
-			cin.unget();
-			std::getline(cin, arg);
-			lock.lock();
-			tasks.push(Task(Task::SENDSTREAM, arg));
-			lock.unlock();
-		} else if (command == "shutdown")
-		{
-			lock.lock();
-			tasks.push(Task(Task::SHUTDOWN));
-			lock.unlock();
-		} else if (command == "quit")
-			break;
-		else
-		{
-			cerr << "Unknown command: " << command << "\n";
-		}
-	}
+	cout <<
+		"\n\
+Tamce File Transmit Protocal(TSFTP)\n\
+         Client Side Program\n\
+\n\
+Usage:\n\
+\n\
+tftp addr port\n\
+\n\
+addr   \tAddress to connect to\n\
+port   \tTarget port\
+";
 }
